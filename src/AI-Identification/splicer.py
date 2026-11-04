@@ -1,12 +1,16 @@
 import cv2
 import numpy as np
+import os
+
+MODEL_PATH = os.path.expanduser("~/Project_Butler/data/faces/face_detection_yunet_2023mar.onnx")
+OVERLAP_LIMIT = 0.3
 
 class SpliceFailureException(Exception):
     """Custom exception raised when frame-level validation parameters fail."""
     pass
 
 class Splicer:
-    def __init__(self, model_path: str, min_face_size: int = 40, confidence_cutoff: float = 0.8, iou_limit: float = 0.3):
+    def __init__(self, model_path: str = MODEL_PATH, min_face_size: int = 40, confidence_cutoff: float = 0.6, iou_limit: float = OVERLAP_LIMIT):
         """
         Initializes the stateless YuNet face detector.
         
@@ -23,11 +27,11 @@ class Splicer:
         # Instantiate YuNet via OpenCV's DNN FaceDetectorYN class
         # We pass dummy dimensions (1, 1) during initial construct; updated dynamically per frame
         self.detector = cv2.FaceDetectorYN.create(
-            model=model_path,
+            model=MODEL_PATH,
             config="",
             input_size=(1, 1),
             score_threshold=self.confidence_cutoff,
-            nms_threshold=0.3,
+            nms_threshold=self.iou_limit,
             top_k=10
         )
 
@@ -93,15 +97,7 @@ class Splicer:
 
             parsed_faces.append({'box': box, 'confidence': confidence, 'raw_face': face})
 
-        # 3. Check for physical overlapping (IoU Verification Layer)
-        num_faces = len(parsed_faces)
-        for i in range(num_faces):
-            for j in range(i + 1, num_faces):
-                iou = self._calculate_iou(parsed_faces[i]['box'], parsed_faces[j]['box'])
-                if iou > self.iou_limit:
-                    raise SpliceFailureException(f"Overlapping bounding boxes detected (IoU: {iou:.2f}). Separation failed.")
-
-        # 4. Generate final output payloads
+        # 3. Generate final output payloads
         final_crops = []
         for f_data in parsed_faces:
             # Crop the bounding region from the parent matrix
