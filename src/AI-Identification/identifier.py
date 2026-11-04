@@ -21,28 +21,18 @@ class Identifier:
             config=""
         )
 
-    def extract_embedding(self, aligned_crop: np.ndarray) -> np.ndarray:
+    def extract_embedding(self, crop: np.ndarray) -> np.ndarray:
         """
-        Extracts a 128-float32 embedding vector from a 112x112 aligned face crop.
+        Extracts a 128-dimensional embedding vector from a given aligned face crop.
         
-        This method is purely stateless and acts entirely in RAM.
+        Args:
+            crop: Aligned face crop matrix from the Splicer.
+
+        Returns:
+            A 128-dimensional embedding vector.
         """
         # SFace expects a specific image matrix format; feature extraction runs local inference
-        embedding = self.recognizer.feature(aligned_crop)
-        
-        # OpenCV returns a 1x128 or 1x512 matrix. We flatten it to a clean 1D array
-        return embedding.flatten()
-
-    def _calculate_cosine_similarity(self, vecA: np.ndarray, vecB: np.ndarray) -> float:
-        """Computes the cosine similarity between two 128-float32 vectors."""
-        dot_product = np.dot(vecA, vecB)
-        normA = np.linalg.norm(vecA)
-        normB = np.linalg.norm(vecB)
-        
-        if normA == 0 or normB == 0:
-            return 0.0
-            
-        return float(dot_product / (normA * normB))
+        return self.recognizer.feature(crop)  # Returns a 128-dimensional vector
 
     def identify(self, crop: np.ndarray, subjects_references: dict) -> tuple:
         """
@@ -66,11 +56,11 @@ class Identifier:
 
         subject_scores = {}
 
-        # Step 2: Compute Best-of-5 cosine similarity for each individual subject profile
+        # Step 2: Compute the best cosine similarity for each individual subject profile on the list
         for subject_name, vectors in subjects_references.items():
             max_similarity = -1.0
             for ref_vector in vectors:
-                similarity = self._calculate_cosine_similarity(current_embedding, ref_vector)
+                similarity = self.recognizer.match(current_embedding, ref_vector, cv2.FaceRecognizerSF_FR_COSINE)  # [1] is the cosine similarity score
                 if similarity > max_similarity:
                     max_similarity = similarity
             
